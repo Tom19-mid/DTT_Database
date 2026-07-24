@@ -825,3 +825,43 @@ AFTER INSERT OR UPDATE OR DELETE
 ON invoice_items
 FOR EACH ROW
 EXECUTE FUNCTION recalc_invoice_total();
+
+---------------------------------------------------------------------------
+-- Bổ sung thêm (Đăng)
+-- 1. Thêm CCCD và phone vào patients
+ALTER TABLE patients
+  ADD COLUMN IF NOT EXISTS cccd_number  VARCHAR(12),
+  ADD COLUMN IF NOT EXISTS phone_number VARCHAR(20);
+-- 2. Đồng bộ verification_status về chữ thường
+ALTER TABLE patients
+  ALTER COLUMN verification_status SET DEFAULT 'pending';
+UPDATE patients SET verification_status = LOWER(verification_status);
+ALTER TABLE patients DROP CONSTRAINT IF EXISTS chk_verification_status;
+ALTER TABLE patients ADD CONSTRAINT chk_verification_status
+  CHECK (verification_status IN ('pending', 'verified', 'rejected'));
+-- 3. Bảng hồ sơ người thân
+CREATE TABLE IF NOT EXISTS family_members (
+  member_id               SERIAL PRIMARY KEY,
+  owner_patient_id        INTEGER NOT NULL REFERENCES patients(patient_id),
+  full_name               VARCHAR(255) NOT NULL,
+  date_of_birth           DATE,
+  gender                  VARCHAR(20),
+  relationship            VARCHAR(50) NOT NULL,
+  phone_number            VARCHAR(20),
+  cccd_number             VARCHAR(12),
+  health_insurance_number VARCHAR(50),
+  address                 TEXT,
+  verification_status     VARCHAR(20) NOT NULL DEFAULT 'pending',
+  verified_at             TIMESTAMP WITHOUT TIME ZONE,
+  verified_by             UUID REFERENCES users(user_id),
+  verification_note       TEXT,
+  created_at              TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+  updated_at              TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT chk_member_status
+    CHECK (verification_status IN ('pending', 'verified', 'rejected'))
+);
+-- 4. Thêm avatar và rating cho bác sĩ
+ALTER TABLE doctors
+  ADD COLUMN IF NOT EXISTS avatar_url   TEXT,
+  ADD COLUMN IF NOT EXISTS rating       DECIMAL(3,2) DEFAULT 5.0,
+  ADD COLUMN IF NOT EXISTS review_count INTEGER DEFAULT 0;
