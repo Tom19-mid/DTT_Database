@@ -865,3 +865,54 @@ ALTER TABLE doctors
   ADD COLUMN IF NOT EXISTS avatar_url   TEXT,
   ADD COLUMN IF NOT EXISTS rating       DECIMAL(3,2) DEFAULT 5.0,
   ADD COLUMN IF NOT EXISTS review_count INTEGER DEFAULT 0;
+
+---------------------------------------------------------------------------
+-- Bổ sung thêm (Đăng 25/7/2026)
+-- 1. Sửa payment_status về chữ thường
+ALTER TABLE invoices
+  ALTER COLUMN payment_status SET DEFAULT 'unpaid';
+
+UPDATE invoices 
+SET payment_status = LOWER(payment_status);
+
+ALTER TABLE invoices DROP CONSTRAINT IF EXISTS chk_payment_status;
+ALTER TABLE invoices ADD CONSTRAINT chk_payment_status
+  CHECK (payment_status IN ('unpaid', 'partial', 'paid'));
+
+-- 2. Tạo bảng gói khám sức khỏe
+CREATE TABLE IF NOT EXISTS health_packages (
+  package_id    SERIAL PRIMARY KEY,
+  title         VARCHAR(255) NOT NULL,
+  description   TEXT,
+  price         DECIMAL(12, 2) NOT NULL,
+  gender_target VARCHAR(10) DEFAULT 'all',  -- 'male' | 'female' | 'all'
+  image_url     TEXT,
+  booked_count  INTEGER DEFAULT 0,
+  is_active     BOOLEAN DEFAULT TRUE,
+  created_at    TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+  updated_at    TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT chk_gender_target CHECK (gender_target IN ('male', 'female', 'all'))
+);
+
+-- Bảng chi tiết dịch vụ trong gói
+CREATE TABLE IF NOT EXISTS health_package_details (
+  detail_id   SERIAL PRIMARY KEY,
+  package_id  INTEGER NOT NULL REFERENCES health_packages(package_id) ON DELETE CASCADE,
+  service_name VARCHAR(255) NOT NULL,
+  sort_order  INTEGER DEFAULT 0
+);
+
+-- Thêm dữ liệu mẫu từ MOCK của app
+INSERT INTO health_packages (title, description, price, gender_target, booked_count) VALUES
+  ('Khám Tổng Quát Cơ Bản - Nam', 
+   'Gói khám được thiết kế chuyên biệt cho nam giới, giúp tầm soát và phát hiện sớm các bệnh lý phổ biến.',
+   1200000, 'male', 1200),
+  ('Khám Tổng Quát Cơ Bản - Nữ', 
+   'Gói khám toàn diện dành cho nữ giới, bao gồm các chỉ số sức khỏe tổng quát và siêu âm tuyến vú/phụ khoa cơ bản.',
+   1450000, 'female', 2000),
+  ('Tầm soát Ung thư Vú & Cổ tử cung', 
+   'Tầm soát chuyên sâu giúp phát hiện sớm các dấu hiệu của ung thư vú và ung thư cổ tử cung ở phụ nữ.',
+   2500000, 'female', 500),
+  ('Tầm soát Bệnh lý Tim mạch', 
+   'Gói tầm soát dành cho người có nguy cơ cao về tim mạch, huyết áp.',
+   1800000, 'all', 800);
