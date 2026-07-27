@@ -916,3 +916,112 @@ INSERT INTO health_packages (title, description, price, gender_target, booked_co
   ('Tầm soát Bệnh lý Tim mạch', 
    'Gói tầm soát dành cho người có nguy cơ cao về tim mạch, huyết áp.',
    1800000, 'all', 800);
+---------------------------------------------------------------------------
+-- Bổ sung thêm (Đăng 27/7/2026)
+-- ==============================================================================
+-- 1. THÊM CHỈ SỐ SINH TỒN & LÝ DO NHẬP VIỆN VÀO HỒ SƠ BỆNH ÁN (medical_records)
+-- ==============================================================================
+ALTER TABLE medical_records
+  ADD COLUMN IF NOT EXISTS admission_reason TEXT,              -- Lý do vào viện / Triệu chứng sơ bộ
+  ADD COLUMN IF NOT EXISTS blood_pressure VARCHAR(20),        -- Huyết áp (Vd: '120/80')
+  ADD COLUMN IF NOT EXISTS heart_rate INTEGER,                -- Nhịp tim (bpm)
+  ADD COLUMN IF NOT EXISTS temperature DECIMAL(4, 2),         -- Nhiệt độ cơ thể (°C)
+  ADD COLUMN IF NOT EXISTS height DECIMAL(5, 2),              -- Chiều cao (cm)
+  ADD COLUMN IF NOT EXISTS weight DECIMAL(5, 2),              -- Cân nặng (kg)
+  ADD COLUMN IF NOT EXISTS bmi DECIMAL(4, 2),                 -- Chỉ số khối cơ thể (BMI)
+  ADD COLUMN IF NOT EXISTS icd_code VARCHAR(20),             -- Mã ICD-10 (Vd: 'J06.9')
+  ADD COLUMN IF NOT EXISTS icd_description VARCHAR(255);     -- Tên chẩn đoán chuẩn theo ICD-10
+
+-- ==============================================================================
+-- 2. TẠO TỪ ĐIỂN DỊCH VỤ CẬN LÂM SÀNG (CLS) & LIÊN CHUYỂN BỆNH ÁN
+-- ==============================================================================
+CREATE TABLE IF NOT EXISTS clinical_services (
+  service_id      SERIAL PRIMARY KEY,
+  service_code    VARCHAR(50) UNIQUE NOT NULL,      -- Vd: 'LAB01', 'IMG01'
+  service_name    VARCHAR(255) NOT NULL,            -- Vd: 'Xét nghiệm máu tổng quát'
+  service_type    VARCHAR(50) NOT NULL,             -- 'Laboratory' (Xét nghiệm) hoặc 'Imaging' (Chẩn đoán ảnh)
+  department      VARCHAR(100),                     -- Phòng ban thụ lý
+  unit_price      NUMERIC NOT NULL DEFAULT 0,       -- Đơn giá dịch vụ (VNĐ)
+  description     TEXT,
+  is_active       BOOLEAN DEFAULT true,
+  created_at      TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+  updated_at      TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+ALTER TABLE ultrasound_results
+  ADD COLUMN IF NOT EXISTS result_status VARCHAR(20) DEFAULT 'Pending',
+  ADD COLUMN IF NOT EXISTS service_id INTEGER REFERENCES clinical_services(service_id);
+  
+ALTER TABLE medical_tests
+  ADD COLUMN IF NOT EXISTS service_id INTEGER REFERENCES clinical_services(service_id);
+
+-- ==============================================================================
+-- 3. BỘ TIÊU CHÍ KHO THUỐC, HOẠT CHẤT & ĐƠN GIÁ CHO BẢNG MEDICINES
+-- ==============================================================================
+ALTER TABLE medicines
+  ADD COLUMN IF NOT EXISTS unit_price NUMERIC NOT NULL DEFAULT 0,      -- Giá mỗi đơn vị (Hộp/Viên)
+  ADD COLUMN IF NOT EXISTS stock_quantity INTEGER NOT NULL DEFAULT 0,  -- Tồn kho phòng khám
+  ADD COLUMN IF NOT EXISTS expiry_date DATE;                           -- Hạn sử dụng của thuốc
+
+-- ==============================================================================
+-- 4. ĐỒNG BỘ KHÁM CHỮA BỆNH CHO NGƯỜI THÂN (FAMILY MEMBERS BINDING)
+-- ==============================================================================
+ALTER TABLE appointments
+  ADD COLUMN IF NOT EXISTS member_id INTEGER REFERENCES family_members(member_id) ON DELETE SET NULL;
+ALTER TABLE medical_records
+  ADD COLUMN IF NOT EXISTS member_id INTEGER REFERENCES family_members(member_id) ON DELETE SET NULL;
+ALTER TABLE invoices
+  ADD COLUMN IF NOT EXISTS member_id INTEGER REFERENCES family_members(member_id) ON DELETE SET NULL;
+
+-- ==============================================================================
+-- 5. TẠO TỪ ĐIỂN MÃ BỆNH QUỐC TẾ ICD-10 (CHO WINFORMS AUTOCOMPLETE)
+-- ==============================================================================
+CREATE TABLE IF NOT EXISTS icd10_catalog (
+  icd_code        VARCHAR(20) PRIMARY KEY,
+  disease_name    VARCHAR(255) NOT NULL,
+  chapter_name    VARCHAR(255),
+  is_common       BOOLEAN DEFAULT false
+);
+
+-- ==============================================================================
+-- 6. TẠO NHẬT KÝ BẢO MẬT & KIỂM THỬ LÂM SÀNG (MEDICAL AUDIT LOGS)
+-- ==============================================================================
+CREATE TABLE IF NOT EXISTS user_activity_logs (
+  log_id          SERIAL PRIMARY KEY,
+  user_id         UUID REFERENCES users(user_id),
+  action_type     VARCHAR(100) NOT NULL,        -- 'START_EXAM', 'ISSUE_PRESCRIPTION', 'ORDER_LAB'
+  entity_name     VARCHAR(100),                 -- 'medical_records', 'prescriptions'
+  entity_id       INTEGER,
+  ip_address      VARCHAR(50),
+  created_at      TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- ==============================================================================
+-- 7. NẠP DỮ LIỆU MẪU CHUNG (SEED DATA) CHO WINFORMS & APP MOBILE
+-- ==============================================================================
+-- Nạp Dịch vụ CLS tương thích tuyệt đối với 7 Checkbox trên ảnh KhamBenh.png:
+INSERT INTO clinical_services (service_code, service_name, service_type, department, unit_price)
+VALUES 
+  ('LAB_BLOOD', 'Xét nghiệm máu tổng quát', 'Laboratory', 'Phòng Xét nghiệm Tầng 2', 150000),
+  ('LAB_URINE', 'Xét nghiệm nước tiểu', 'Laboratory', 'Phòng Xét nghiệm Tầng 2', 100000),
+  ('IMG_XRAY',  'X-Quang ngực thẳng/nghiêng', 'Imaging',    'Phòng Chẩn đoán hình ảnh Tầng 3', 250000),
+  ('IMG_ULTRA', 'Siêu âm bụng tổng quát',     'Imaging',    'Phòng Siêu âm Tầng 3', 200000),
+  ('IMG_CT',    'CT Scanner Sọ não / Ngực',   'Imaging',    'Phòng CT/MRI Tầng 3', 1500000),
+  ('LAB_ECG',   'Điện tâm đồ (ECG)',          'Functional', 'Phòng Thăm dò chức năng', 180000),
+  ('LAB_GLU',   'Xét nghiệm đường huyết',     'Laboratory', 'Phòng Xét nghiệm Tầng 2', 80000)
+ON CONFLICT (service_code) DO UPDATE SET unit_price = EXCLUDED.unit_price;
+
+-- Nạp 10 mã Bệnh lý ICD-10 phổ biến nhất cho Từ điển Bác sĩ:
+INSERT INTO icd10_catalog (icd_code, disease_name, chapter_name, is_common)
+VALUES
+  ('J06.9', 'Viêm đường hô hấp trên cấp tính, không xác định', 'Bệnh hệ hô hấp', true),
+  ('I10',   'Tăng huyết áp vô căn (nguyên phát)', 'Bệnh hệ tuần hoàn', true),
+  ('E11',   'Bệnh đái tháo đường tuýp 2', 'Bệnh nội tiết và chuyển hóa', true),
+  ('K21.9', 'Bệnh trào ngược dạ dày - thực quản không kèm viêm', 'Bệnh hệ tiêu hóa', true),
+  ('J20.9', 'Viêm phế quản cấp, không xác định', 'Bệnh hệ hô hấp', true),
+  ('R51',   'Đau đầu / Nhức đầu không xác định', 'Triệu chứng lâm sàng chung', true),
+  ('J02.9', 'Viêm họng cấp tính, không xác định', 'Bệnh hệ hô hấp', true),
+  ('A09',   'Tiêu chảy và viêm dạ dày ruột do nhiễm trùng', 'Bệnh nhiễm trùng', true),
+  ('M54.5', 'Đau thắt lưng (Đau lưng dưới)', 'Bệnh hệ cơ xương khớp', true),
+  ('J03.9', 'Viêm amidan cấp, không xác định', 'Bệnh hệ hô hấp', true)
+ON CONFLICT (icd_code) DO NOTHING;
