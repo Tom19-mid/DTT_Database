@@ -1025,3 +1025,32 @@ VALUES
   ('M54.5', 'Đau thắt lưng (Đau lưng dưới)', 'Bệnh hệ cơ xương khớp', true),
   ('J03.9', 'Viêm amidan cấp, không xác định', 'Bệnh hệ hô hấp', true)
 ON CONFLICT (icd_code) DO NOTHING;
+
+---------------------------------------------------------------------------
+-- Bổ sung thêm (Đăng 29/07/2026)
+-- ==============================================================================
+-- SQL BỔ SUNG VAI TRÒ MỚI (TỪ ID 4 TRỞ ĐI) - KHÔNG ĐỤNG CHẠM DỮ LIỆU CŨ 1, 2, 3
+-- ==============================================================================
+
+-- 1. Thêm các vai trò mới từ ID 4
+INSERT INTO roles (role_id, role_name, description) VALUES
+  (4, 'Receptionist', 'Lễ tân tiếp đón, quét QR Check-in, thu ngân & in hóa đơn'),
+  (5, 'Nurse',        'Điều dưỡng đo sinh hiệu tiền lâm sàng (Huyết áp, Mạch, BMI)'),
+  (6, 'LabTech',      'Kỹ thuật viên Cận lâm sàng (Siêu âm, X-Quang, Xét nghiệm)'),
+  (7, 'Pharmacist',   'Dược sĩ nhà thuốc, tiếp nhận đơn thuốc QR & xuất kho')
+ON CONFLICT (role_id) DO UPDATE SET 
+  role_name = EXCLUDED.role_name, 
+  description = EXCLUDED.description;
+
+-- 2. Thêm cột role_code mã hóa ngắn
+ALTER TABLE roles ADD COLUMN IF NOT EXISTS role_code VARCHAR(50);
+UPDATE roles SET role_code = 'ADMIN' WHERE role_id = 1;
+UPDATE roles SET role_code = 'DOCTOR' WHERE role_id = 2;
+UPDATE roles SET role_code = 'PATIENT' WHERE role_id = 3;
+UPDATE roles SET role_code = 'RECEPTIONIST' WHERE role_id = 4;
+UPDATE roles SET role_code = 'NURSE' WHERE role_id = 5;
+UPDATE roles SET role_code = 'LAB_TECH' WHERE role_id = 6;
+UPDATE roles SET role_code = 'PHARMACIST' WHERE role_id = 7;
+
+-- 3. Cập nhật tự động tăng ID tiếp theo
+SELECT setval('roles_role_id_seq', (SELECT MAX(role_id) FROM roles));
