@@ -76,6 +76,18 @@ CREATE TABLE doctors (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE doctor_leaves (
+    leave_id SERIAL PRIMARY KEY,
+    doctor_id INT NOT NULL REFERENCES doctors(doctor_id),
+    leave_start_date DATE NOT NULL,
+    leave_end_date DATE NOT NULL,
+    reason TEXT,
+    status VARCHAR(20) DEFAULT 'Approved'
+        CHECK (status IN ('Pending', 'Approved', 'Rejected', 'Cancelled')),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    CHECK (leave_start_date <= leave_end_date)
+);
+
 -- Khi bác sĩ chuyển sang 'OnLeave', các ca làm việc (doctor_schedules) sắp tới của họ sẽ tự động đóng lại 
 -- và cả (doctor_schedule_slots) tính từ ngày để OnLeave, 
 -- không thì bệnh nhân vẫn đặt được lịch với bác sĩ đang nghỉ, trong trường hợp nếu như Booked
@@ -1054,3 +1066,153 @@ UPDATE roles SET role_code = 'PHARMACIST' WHERE role_id = 7;
 
 -- 3. Cập nhật tự động tăng ID tiếp theo
 SELECT setval('roles_role_id_seq', (SELECT MAX(role_id) FROM roles));
+
+---------------------------------------------------------------------------
+-- Bổ sung thêm (Tân 30/07/2026)
+-- Xóa 2 cột leave_start_date và leave_end_date khỏi bảng Doctors
+ALTER TABLE doctors
+DROP CONSTRAINT IF EXISTS chk_leave_dates;
+
+ALTER TABLE doctors
+DROP COLUMN IF EXISTS leave_start_date,
+DROP COLUMN IF EXISTS leave_end_date;
+
+-- Bổ sung cột cho doctor_leaves
+ALTER TABLE doctor_leaves
+ADD COLUMN updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+ADD COLUMN approved_at TIMESTAMP,
+ADD COLUMN approved_by UUID REFERENCES users(user_id);
+
+-- Cập nhật Trigger 
+CREATE TRIGGER trg_doctor_leaves_updated_at
+BEFORE UPDATE
+ON doctor_leaves
+FOR EACH ROW
+EXECUTE FUNCTION update_updated_at();
+
+-- Xóa trigger cũ 
+DROP TRIGGER IF EXISTS trg_close_schedules_on_leave
+ON doctors;
+
+DROP FUNCTION IF EXISTS close_schedules_on_leave();
+
+-- Tạo trigger mới 
+CREATE OR REPLACE FUNCTION close_schedules_on_leave()
+RETURNS TRIGGER AS
+$$
+BEGIN
+
+    -- Chỉ xử lý khi đơn nghỉ được duyệt
+    IF NEW.status = 'Approved' THEN
+
+        -- Đóng các lịch còn Available
+        UPDATE doctor_schedules
+        SET status = 'Unavailable'
+        WHERE doctor_id = NEW.doctor_id
+          AND work_date BETWEEN NEW.leave_start_date
+                            AND NEW.leave_end_date
+          AND status = 'Available';
+
+        -- Đóng các slot Available
+        UPDATE doctor_schedule_slots
+        SET status = 'Closed'
+        WHERE schedule_id IN
+        (
+            SELECT schedule_id
+            FROM doctor_schedules
+            WHERE doctor_id = NEW.doctor_id
+              AND work_date BETWEEN NEW.leave_start_date
+                                AND NEW.leave_end_date
+        )
+        AND status = 'Available';
+
+        -- Cập nhật trạng thái bác sĩ
+        UPDATE doctors
+        SET status = 'OnLeave'
+        WHERE doctor_id = NEW.doctor_id;
+
+    END IF;
+
+    RETURN NEW;
+
+END;
+$$
+LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_close_schedules_on_leave
+AFTER INSERT OR UPDATE
+ON doctor_leaves
+FOR EACH ROW
+EXECUTE FUNCTION close_schedules_on_leave();
+
+-- Trigger khi hết thời gian nghỉ sẽ đổi lại thành Active
+CREATE OR REPLACE FUNCTION restore_doctor_after_leave()
+RETURNS TRIGGER AS
+$$
+BEGIN
+
+    UPDATE doctors
+    SET status = 'Active'
+    WHERE doctor_id = NEW.doctor_id
+      AND status = 'OnLeave'
+      AND CURRENT_DATE > NEW.leave_end_date;
+
+    RETURN NEW;
+
+END;
+$$
+LANGUAGE plpgsql;
+
+-- Xóa trigger check_schedule_overlap() và tạo lại trigger check_schedule_overlap()
+DROP TRIGGER IF EXISTS trg_check_schedule_overlap
+ON doctor_schedules;
+
+DROP FUNCTION IF EXISTS check_schedule_overlap();
+
+CREATE OR REPLACE FUNCTION check_schedule_overlap()
+RETURNS TRIGGER AS
+$$
+BEGIN
+
+    -- kiểm tra trùng giờ
+    IF EXISTS
+    (
+        SELECT 1
+        FROM doctor_schedules
+        WHERE doctor_id = NEW.doctor_id
+          AND work_date = NEW.work_date
+          AND schedule_id <> NEW.schedule_id
+          AND NEW.start_time < end_time
+          AND NEW.end_time > start_time
+    )
+    THEN
+        RAISE EXCEPTION
+        'Doctor already has another schedule during this time.';
+    END IF;
+
+    -- kiểm tra nghỉ phép
+    IF EXISTS
+    (
+        SELECT 1
+        FROM doctor_leaves
+        WHERE doctor_id = NEW.doctor_id
+          AND status = 'Approved'
+          AND NEW.work_date BETWEEN leave_start_date
+                                AND leave_end_date
+    )
+    THEN
+        RAISE EXCEPTION
+        'Doctor is on leave on this date.';
+    END IF;
+
+    RETURN NEW;
+
+END;
+$$
+LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_check_schedule_overlap
+BEFORE INSERT OR UPDATE
+ON doctor_schedules
+FOR EACH ROW
+EXECUTE FUNCTION check_schedule_overlap();
