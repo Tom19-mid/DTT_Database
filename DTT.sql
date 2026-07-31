@@ -71,7 +71,7 @@ CREATE TABLE doctors (
 		CHECK (leave_start_date IS NULL OR leave_end_date IS NULL
 				OR leave_start_date <= leave_end_date),
     status VARCHAR(20) DEFAULT 'Active'
-        CHECK (status IN ('Active', 'Inactive', 'OnLeave')),
+        CHECK (status IN ('Active', 'Inactive', 'OnLeave', 'Locked')),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -82,7 +82,7 @@ CREATE TABLE doctor_leaves (
     leave_start_date DATE NOT NULL,
     leave_end_date DATE NOT NULL,
     reason TEXT,
-    status VARCHAR(20) DEFAULT 'Approved'
+    status VARCHAR(20) DEFAULT 'Pending'
         CHECK (status IN ('Pending', 'Approved', 'Rejected', 'Cancelled')),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     CHECK (leave_start_date <= leave_end_date)
@@ -146,7 +146,7 @@ CREATE TABLE doctor_schedules (
 	CHECK (start_time<end_time),
 	
     status VARCHAR(20) DEFAULT 'Available'
-        CHECK (status IN ('Available', 'Unavailable')),
+        CHECK (status IN ('Available', 'Partially Booked', 'Fully Booked', 'Unavailable')),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -1216,3 +1216,7 @@ BEFORE INSERT OR UPDATE
 ON doctor_schedules
 FOR EACH ROW
 EXECUTE FUNCTION check_schedule_overlap();
+---------------------------------------------------------------------------
+-- Bổ sung thêm (Tân 31/07/2026)
+ALTER TABLE 
+ADD COLUMN IF NOT EXISTS avarta_url TEXT;
