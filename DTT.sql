@@ -1220,3 +1220,205 @@ EXECUTE FUNCTION check_schedule_overlap();
 -- Bổ sung thêm (Tân 31/07/2026)
 ALTER TABLE 
 ADD COLUMN IF NOT EXISTS avarta_url TEXT;
+---------------------------------------------------------------------------
+-- Bổ sung thêm (Đăng 1/08/2026)
+-- 1. ĐẢM BẢO CÓ ĐỦ BẢNG VAI TRÒ (ROLES)
+INSERT INTO roles (role_id, role_name, role_code, description) VALUES
+(4, 'Lễ tân tiếp đón', 'RECEPTIONIST', 'Lễ tân Check-in QR & Bàn Thu ngân viện phí'),
+(5, 'Điều dưỡng', 'NURSE', 'Điều dưỡng đo chỉ số sinh hiệu tiền lâm sàng'),
+(6, 'Kỹ thuật viên CLS', 'LAB_TECH', 'KTV Siêu âm / Xét nghiệm / X-Quang'),
+(7, 'Dược sĩ', 'PHARMACIST', 'Dược sĩ nhà thuốc phát thuốc đơn QR')
+ON CONFLICT (role_id) DO UPDATE 
+SET role_name = EXCLUDED.role_name, role_code = EXCLUDED.role_code, description = EXCLUDED.description;
+
+-- 2. TẠO TÀI KHOẢN ĐĂNG NHẬP CHO 4 VAI TRÒ NHÂN VIÊN MỚI
+DELETE FROM users WHERE phone_number IN ('0900000004', '0900000005', '0900000006', '0900000007');
+
+INSERT INTO users (user_id, phone_number, email, password_hash, role_id, status, created_at, updated_at) VALUES
+-- 1. Lễ Tân & Thu Ngân (Nguyễn Thị Minh Châu)
+('44444444-4444-4444-4444-444444444444', '0900000004', 'letan.minhchau@dtt-healthcare.vn', '$2a$11$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad6J1B4B1V6K6Ne', 4, 'Active', NOW(), NOW()),
+
+-- 2. Điều Dưỡng Trạm Sinh Hiệu (Phạm Thị Hồng Hạnh)
+('55555555-5555-5555-5555-555555555555', '0900000005', 'dieuduong.honghanh@dtt-healthcare.vn', '$2a$11$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad6J1B4B1V6K6Ne', 5, 'Active', NOW(), NOW()),
+
+-- 3. Kỹ Thuật Viên Cận Lâm Sàng (Trần Tuấn Kiệt)
+('66666666-6666-6666-6666-666666666666', '0900000006', 'ktv.tuankiet@dtt-healthcare.vn', '$2a$11$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad6J1B4B1V6K6Ne', 6, 'Active', NOW(), NOW()),
+
+-- 4. Dược Sĩ Nhà Thuốc (Trịnh Mai Phương)
+('77777777-7777-7777-7777-777777777777', '0900000007', 'duocsi.maiphuong@dtt-healthcare.vn', '$2a$11$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad6J1B4B1V6K6Ne', 7, 'Active', NOW(), NOW());
+
+-- 3. THÊM HỒ SƠ LÀM VIỆC VÀO BẢNG DOCTORS Cho 4 Nhân Viên Này
+DELETE FROM doctors WHERE user_id IN (
+    '44444444-4444-4444-4444-444444444444', '55555555-5555-5555-5555-555555555555',
+    '66666666-6666-6666-6666-666666666666', '77777777-7777-7777-7777-777777777777'
+);
+
+INSERT INTO doctors (user_id, specialty_id, full_name, degree, experience_years, clinic_room, rating, status) VALUES
+('44444444-4444-4444-4444-444444444444', 1, 'Nguyễn Thị Minh Châu', 'Cử nhân Quản trị Y tế', 5, 'Bàn Tiếp Đón & Thu Ngân #01', 5.0, 'Active'),
+('55555555-5555-5555-5555-555555555555', 1, 'Phạm Thị Hồng Hạnh', 'Cử nhân Điều dưỡng Chính', 7, 'Trạm Đo Sinh Hiệu #02', 5.0, 'Active'),
+('66666666-6666-6666-6666-666666666666', 8, 'KTV. Trần Tuấn Kiệt', 'Cử nhân Chẩn đoán Hình ảnh', 8, 'Phòng Siêu âm / Xét nghiệm', 5.0, 'Active'),
+('77777777-7777-7777-7777-777777777777', 1, 'Ds. Trịnh Mai Phương', 'Dược sĩ Đại học', 10, 'Nhà Thuốc Bệnh Viện #01', 5.0, 'Active');
+---------------------------------------------------------------------------
+
+-- =============================================================================
+-- DTT HEALTHCARE - SQL SEED SCRIPT FOR 30 REALISTIC MEDICINES & CATEGORIES
+-- Run this script in PostgreSQL (pgAdmin, DBeaver, or psql)
+-- =============================================================================
+
+-- 1. Insert Medicine Categories (Danh mục nhóm thuốc)
+INSERT INTO medicine_categories (category_id, category_name, description, status, created_at, updated_at) VALUES
+(1, 'Thuốc Kháng sinh & Kháng viêm', 'Điều trị nhiễm khuẩn, viêm đường hô hấp, tai mũi họng', 'Active', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+(2, 'Thuốc Giảm đau & Hạ sốt', 'Giảm đau tổng quát, hạ sốt, kháng viêm không steroid', 'Active', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+(3, 'Thuốc Tim mạch & Huyết áp', 'Điều trị tăng huyết áp, rối loạn nhịp tim, mạch vành', 'Active', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+(4, 'Thuốc Tiêu hóa & Dạ dày', 'Điều trị viêm loét dạ dày, trào ngược dạ dày thực quản, tiêu chảy', 'Active', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+(5, 'Thuốc Cơ xương khớp', 'Điều trị thoái hóa khớp, Gút, đau thần kinh tọa, loãng xương', 'Active', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+(6, 'Thuốc Nhi khoa & Bổ sung', 'Siro ho, vitamin, vi chất cho trẻ em và người lớn', 'Active', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+(7, 'Thuốc Da liễu & Dị ứng', 'Thuốc bôi da, chống dị ứng, mẩn ngứa, viêm da cơ địa', 'Active', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+ON CONFLICT (category_id) DO UPDATE SET category_name = EXCLUDED.category_name, description = EXCLUDED.description;
+
+-- 2. Insert 30 Medicines with realistic usage guidelines & units
+INSERT INTO medicines (medicine_id, category_id, medicine_name, unit, description, default_usage, status, created_at, updated_at) VALUES
+-- Nhóm 1: Kháng sinh & Kháng viêm (Nội tổng quát / Tai mũi họng)
+(1, 1, 'Amoxicillin 500mg', 'Viên', 'Kháng sinh nhóm Penicillin', 'Uống 1 viên/lần, 2 lần/ngày sau ăn sáng, tối', 'Active', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+(2, 1, 'Augmentin 1g (Amoxicillin/Clavulanate)', 'Viên', 'Kháng sinh phổ rộng chống nhiễm khuẩn', 'Uống 1 viên/lần, 2 lần/ngày sau ăn', 'Active', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+(3, 1, 'Cefuroxime 500mg (Zinnat)', 'Viên', 'Kháng sinh Cephalosporin thế hệ 2', 'Uống 1 viên/lần, 2 lần/ngày sau ăn', 'Active', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+(4, 1, 'Azithromycin 500mg', 'Viên', 'Kháng sinh Macrolide điều trị viêm phế quản', 'Uống 1 viên/lần/ngày trước ăn 1 giờ', 'Active', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+(5, 1, 'Ciprofloxacin 500mg', 'Viên', 'Kháng sinh Quinolone điều trị nhiễm trùng đường tiết niệu', 'Uống 1 viên/lần, 2 lần/ngày', 'Active', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+
+-- Nhóm 2: Giảm đau & Hạ sốt (Tổng quát)
+(6, 2, 'Paracetamol 500mg (Panadol Extra)', 'Viên', 'Giảm đau, hạ sốt nhanh', 'Uống 1-2 viên/lần khi sốt >38.5°C (cách nhau 4-6h)', 'Active', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+(7, 2, 'Ibuprofen 400mg', 'Viên', 'Giảm đau kháng viêm NSAID', 'Uống 1 viên/lần, 2 lần/ngày sau ăn no', 'Active', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+(8, 2, 'Efferalgan Codeine 500mg', 'Sủi', 'Giảm đau vừa đến nặng', 'Hòa 1 viên sủi vào 200ml nước uống khi đau', 'Active', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+(9, 2, 'Celecoxib 200mg (Celebrex)', 'Viên', 'Kháng viêm giảm đau khớp ức chế COX-2', 'Uống 1 viên/lần/ngày sau ăn', 'Active', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+
+-- Nhóm 3: Tim mạch & Huyết áp (Chuyên khoa Tim mạch)
+(10, 3, 'Amlodipine 5mg (Norvasc)', 'Viên', 'Thuốc chẹn kênh calci trị tăng huyết áp', 'Uống 1 viên/lần/ngày vào buổi sáng', 'Active', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+(11, 3, 'Losartan 50mg (Cozaar)', 'Viên', 'Thuốc chẹn thụ thể Angiotensin II', 'Uống 1 viên/lần/ngày buổi sáng', 'Active', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+(12, 3, 'Atorvastatin 20mg (Lipitor)', 'Viên', 'Thuốc hạ mỡ máu, giảm Cholesterol', 'Uống 1 viên/lần/ngày vào buổi tối trước khi đi ngủ', 'Active', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+(13, 3, 'Concor 5mg (Bisoprolol)', 'Viên', 'Thuốc chẹn beta giảm nhịp tim, hạ áp', 'Uống 1 viên/lần/ngày buổi sáng', 'Active', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+(14, 3, 'Aspirin 81mg (Stent/Chống đông)', 'Viên', 'Thuốc ức chế kết tập tiểu cầu ngừa đột quỵ', 'Uống 1 viên/lần/ngày sau ăn trưa', 'Active', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+
+-- Nhóm 4: Tiêu hóa & Dạ dày (Nội tổng quát / Tiêu hóa)
+(15, 4, 'Nexium mups 40mg (Esomeprazole)', 'Viên', 'Thuốc ức chế bơm Proton trị trào ngược dạ dày', 'Uống 1 viên/lần/ngày trước ăn sáng 30 phút', 'Active', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+(16, 4, 'Phosphalugel (Gói sữa dạ dày)', 'Gói', 'Thuốc trung hòa acid dạ dày, giảm ợ chua', 'Uống 1 gói/lần khi đau bụng hoặc sau ăn 2 giờ', 'Active', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+(17, 4, 'Debridat 100mg (Trimebutine)', 'Viên', 'Thuốc điều hòa nhu động ruột, hội chứng ruột kích thích', 'Uống 1 viên/lần, 3 lần/ngày trước ăn', 'Active', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+(18, 4, 'Smecta 3g', 'Gói', 'Thuốc điều trị tiêu chảy cấp', 'Hòa 1 gói vào 50ml nước uống 2-3 lần/ngày', 'Active', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+-- Nhóm 5: Cơ xương khớp (Chuyên khoa Cơ xương khớp)
+(19, 5, 'Meloxicam 15mg (Mobic)', 'Viên', 'Thuốc kháng viêm giảm đau thoái hóa khớp', 'Uống 1 viên/lần/ngày sau ăn no', 'Active', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+(20, 5, 'Glucosamine Sulfate 1500mg', 'Viên', 'Thuốc bổ sung sụn khớp, tái tạo khớp gối', 'Uống 1 viên/lần/ngày sau ăn', 'Active', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+(21, 5, 'Colchicine 1mg', 'Viên', 'Thuốc điều trị cơn Gút cấp tính', 'Uống 1 viên/lần theo chỉ định bác sĩ', 'Active', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+(22, 5, 'Myonal 50mg (Eperisone)', 'Viên', 'Thuốc giãn cơ, giảm đau mỏi vai cổ, cột sống', 'Uống 1 viên/lần, 3 lần/ngày sau ăn', 'Active', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+
+-- Nhóm 6: Nhi khoa & Vitamin (Nhi khoa & Tổng quát)
+(23, 6, 'Siro Prospan 100ml', 'Chai', 'Siro ho thảo dược trị ho phế quản', 'Uống 5ml/lần, 3 lần/ngày', 'Active', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+(24, 6, 'Hạ sốt Hapacol 250mg', 'Gói', 'Thuốc bột hạ sốt vị cam cho trẻ em', 'Hòa 1 gói vào nước uống khi trẻ sốt >38.5°C', 'Active', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+(25, 6, 'Vitamin C 1000mg', 'Hộp', 'Bổ sung vitamin C tăng đề kháng', 'Hòa 1 viên sủi vào 200ml nước uống mỗi sáng', 'Active', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+(26, 6, 'ZinC 70mg (Kẽm vi chất)', 'Viên', 'Bổ sung kẽm hỗ trợ tiêu hóa và miễn dịch', 'Uống 1 viên/lần/ngày sau ăn', 'Active', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+
+-- Nhóm 7: Da liễu & Dị ứng (Chuyên khoa Da liễu)
+(27, 7, 'Telfast 180mg (Fexofenadine)', 'Viên', 'Thuốc chống dị ứng, mề đai, viêm mũi', 'Uống 1 viên/lần/ngày buổi tối', 'Active', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+(28, 7, 'Claritin 10mg (Loratadine)', 'Viên', 'Thuốc kháng Histamine chống dị ứng', 'Uống 1 viên/lần/ngày', 'Active', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+(29, 7, 'Fucicort Cream 15g', 'Tuýp', 'Kem bôi ngoài da trị viêm da nhiễm khuẩn', 'Thoa 1 lớp mỏng lên vùng da bệnh 2 lần/ngày', 'Active', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+(30, 7, 'Diprospan Injectable', 'Ống', 'Thuốc tiêm kháng viêm dị ứng mạnh', 'Tiêm bắp theo chỉ định chuyên khoa Da liễu', 'Active', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+ON CONFLICT (medicine_id) DO UPDATE SET 
+  category_id = EXCLUDED.category_id,
+  medicine_name = EXCLUDED.medicine_name,
+  unit = EXCLUDED.unit,
+  description = EXCLUDED.description,
+  default_usage = EXCLUDED.default_usage,
+  status = EXCLUDED.status;
+---------------------------------------------------------------------------
+---------------------------------------------------------------------------
+
+  -- 1. Bổ sung cột 'price' vào bảng medicines nếu chưa có
+DO $$ 
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'medicines' AND column_name = 'price'
+    ) THEN
+        ALTER TABLE medicines ADD COLUMN price NUMERIC(12, 2) DEFAULT 15000.00;
+    END IF;
+END $$;
+
+-- 2. Cập nhật ĐƠN GIÁ THỰC TẾ cho 30 loại thuốc thuộc 7 danh mục (medicine_categories)
+UPDATE medicines SET price = 3500.00 WHERE medicine_id = 1;   -- Amoxicillin 500mg
+UPDATE medicines SET price = 22000.00 WHERE medicine_id = 2;  -- Augmentin 1g
+UPDATE medicines SET price = 25000.00 WHERE medicine_id = 3;  -- Cefuroxime 500mg (Zinnat)
+UPDATE medicines SET price = 18000.00 WHERE medicine_id = 4;  -- Azithromycin 500mg
+UPDATE medicines SET price = 8000.00 WHERE medicine_id = 5;   -- Ciprofloxacin 500mg
+
+UPDATE medicines SET price = 2500.00 WHERE medicine_id = 6;   -- Panadol Extra
+UPDATE medicines SET price = 3000.00 WHERE medicine_id = 7;   -- Ibuprofen 400mg
+UPDATE medicines SET price = 7000.00 WHERE medicine_id = 8;   -- Efferalgan Codeine
+UPDATE medicines SET price = 15000.00 WHERE medicine_id = 9;  -- Celecoxib 200mg (Celebrex)
+
+UPDATE medicines SET price = 4000.00 WHERE medicine_id = 10;  -- Amlodipine 5mg
+UPDATE medicines SET price = 6000.00 WHERE medicine_id = 11;  -- Losartan 50mg
+UPDATE medicines SET price = 28000.00 WHERE medicine_id = 12; -- Atorvastatin 20mg (Lipitor)
+UPDATE medicines SET price = 5000.00 WHERE medicine_id = 13;  -- Concor 5mg
+UPDATE medicines SET price = 2000.00 WHERE medicine_id = 14;  -- Aspirin 81mg
+
+UPDATE medicines SET price = 26000.00 WHERE medicine_id = 15; -- Nexium mups 40mg
+UPDATE medicines SET price = 6000.00 WHERE medicine_id = 16;  -- Phosphalugel gói
+UPDATE medicines SET price = 4000.00 WHERE medicine_id = 17;  -- Debridat 100mg
+UPDATE medicines SET price = 4500.00 WHERE medicine_id = 18;  -- Smecta 3g
+
+UPDATE medicines SET price = 12000.00 WHERE medicine_id = 19; -- Meloxicam 15mg
+UPDATE medicines SET price = 8000.00 WHERE medicine_id = 20;  -- Glucosamine 1500mg
+UPDATE medicines SET price = 3000.00 WHERE medicine_id = 21;  -- Colchicine 1mg
+UPDATE medicines SET price = 4000.00 WHERE medicine_id = 22;  -- Myonal 50mg
+
+UPDATE medicines SET price = 85000.00 WHERE medicine_id = 23; -- Siro Prospan 100ml
+UPDATE medicines SET price = 3500.00 WHERE medicine_id = 24;  -- Hapacol 250mg
+UPDATE medicines SET price = 65000.00 WHERE medicine_id = 25; -- Vitamin C 1000mg
+UPDATE medicines SET price = 4000.00 WHERE medicine_id = 26;  -- ZinC 70mg
+
+UPDATE medicines SET price = 12000.00 WHERE medicine_id = 27; -- Telfast 180mg
+UPDATE medicines SET price = 5000.00 WHERE medicine_id = 28;  -- Claritin 10mg
+UPDATE medicines SET price = 95000.00 WHERE medicine_id = 29; -- Fucicort Cream 15g
+UPDATE medicines SET price = 45000.00 WHERE medicine_id = 30; -- Kem dưỡng phục hồi da
+
+
+-- 3. Tạo/Cập nhật Bảng Dịch Vụ Y Tế & Xét Nghiệm & Siêu Âm (medical_services)
+CREATE TABLE IF NOT EXISTS medical_services (
+    service_id SERIAL PRIMARY KEY,
+    service_code VARCHAR(50) UNIQUE NOT NULL,
+    service_name VARCHAR(255) NOT NULL,
+    category_type VARCHAR(50) NOT NULL, -- 'Examination', 'Test', 'Ultrasound', 'Service'
+    price NUMERIC(12, 2) NOT NULL,
+    description TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+INSERT INTO medical_services (service_code, service_name, category_type, price, description) VALUES
+('DV-KHAM-01', 'Công khám Lâm sàng Chuyên khoa', 'Examination', 250000.00, 'Phí khám lâm sàng với Bác sĩ chuyên khoa'),
+('DV-KHAM-02', 'Công khám Tái khám', 'Examination', 150000.00, 'Phí khám lại trong vòng 7 ngày'),
+('DV-KHAM-03', 'Công khám Chuyên gia (Thạc sĩ / Tiến sĩ / BS. CKII)', 'Examination', 300000.00, 'Khám với Bác sĩ Cố vấn / Chuyên gia cao cấp'),
+
+('DV-XN-01', 'Xét nghiệm Công thức máu toàn bộ (CBC)', 'Test', 120000.00, 'Đánh giá hồng cầu, bạch cầu, tiểu cầu'),
+('DV-XN-02', 'Xét nghiệm Đường huyết lúc đói (Glucose)', 'Test', 45000.00, 'Tầm soát bệnh Tiểu đường'),
+('DV-XN-03', 'Xét nghiệm Mỡ máu toàn bộ (Lipid Panel)', 'Test', 180000.00, 'Đo Cholesterol, Triglyceride, HDL, LDL'),
+('DV-XN-04', 'Xét nghiệm Chức năng gan (AST, ALT, GGT)', 'Test', 150000.00, 'Đánh giá tổn thương tế bào gan'),
+('DV-XN-05', 'Xét nghiệm Chức năng thận (Urea, Creatinine)', 'Test', 110000.00, 'Đánh giá lọc thận'),
+('DV-XN-06', 'Xét nghiệm Axit Uric (Tầm soát Gút)', 'Test', 65000.00, 'Đo nồng độ Axit Uric máu'),
+('DV-XN-07', 'Xét nghiệm Nước tiểu 10 thông số', 'Test', 50000.00, 'Tổng phân tích nước tiểu'),
+
+('DV-SA-01', 'Siêu âm Bụng tổng quát', 'Ultrasound', 180000.00, 'Khảo sát gan, mật, tụy, lách, thận, bàng quang'),
+('DV-SA-02', 'Siêu âm Tim Doppler màu', 'Ultrasound', 350000.00, 'Khảo sát cấu trúc tim, van tim và dòng máu'),
+('DV-SA-03', 'Siêu âm Tuyến giáp', 'Ultrasound', 150000.00, 'Tầm soát nhân tuyến giáp, nang giáp'),
+('DV-SA-04', 'Siêu âm Mạch máu / Động mạch cảnh', 'Ultrasound', 300000.00, 'Tầm soát xơ vữa động mạch cảnh'),
+('DV-SA-05', 'Siêu âm Phụ khoa / Thượng vị', 'Ultrasound', 200000.00, 'Khảo sát tử cung, phần phụ'),
+('DV-SA-06', 'Chụp X-quang Ngực thẳng (Chest X-Ray)', 'Ultrasound', 120000.00, 'Khảo sát nhu mô phổi và bóng tim')
+ON CONFLICT (service_code) DO UPDATE SET 
+service_name = EXCLUDED.service_name, 
+price = EXCLUDED.price, 
+description = EXCLUDED.description;
+
+
+-- 4. Cập nhật chuẩn hóa hóa đơn cũ 235k trong CSDL về đúng 250k
+UPDATE invoice_items SET unit_price = 250000.00, amount = 250000.00 WHERE unit_price = 235000.00 OR amount = 235000.00;
+UPDATE invoices SET total_amount = 250000.00, paid_amount = 250000.00 WHERE total_amount = 235000.00 OR paid_amount = 235000.00;
+
+-- Hoàn tất!
+SELECT '✅ CẬP NHẬT BẢNG GIÁ DỊCH VỤ, THUỐC, XÉT NGHIỆM THÀNH CÔNG!' AS status;
