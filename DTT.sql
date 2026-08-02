@@ -1218,7 +1218,7 @@ FOR EACH ROW
 EXECUTE FUNCTION check_schedule_overlap();
 ---------------------------------------------------------------------------
 -- Bổ sung thêm (Tân 31/07/2026)
-ALTER TABLE 
+ALTER TABLE patients
 ADD COLUMN IF NOT EXISTS avarta_url TEXT;
 ---------------------------------------------------------------------------
 -- Bổ sung thêm (Đăng 1/08/2026)
@@ -1422,3 +1422,98 @@ UPDATE invoices SET total_amount = 250000.00, paid_amount = 250000.00 WHERE tota
 
 -- Hoàn tất!
 SELECT '✅ CẬP NHẬT BẢNG GIÁ DỊCH VỤ, THUỐC, XÉT NGHIỆM THÀNH CÔNG!' AS status;
+
+---------------------------------------------------------------------------
+-- Bổ sung thêm (Đăng 02/08/2026)
+-- ==============================================================================
+-- DTT HEALTHCARE - NURSE WORKFLOW MIGRATION
+-- Mục đích: Thêm trạng thái "WaitingForDoctor" và cột nurse_note vào
+--           bảng appointments để hỗ trợ quy trình:
+--           Lễ tân Check-in (status=7)
+--             → Điều dưỡng đo sinh hiệu (status=8 + nurse_note)
+--             → Bác sĩ khám (status=3)
+-- Chạy trên PostgreSQL (pgAdmin, DBeaver hoặc psql)
+-- ==============================================================================
+
+-- 1. Thêm trạng thái mới: WaitingForDoctor (status_id = 8)
+--    Ý nghĩa: Điều dưỡng đã đo xong sinh hiệu, bệnh nhân sẵn sàng vào phòng khám
+INSERT INTO appointment_statuses (status_id, status_name)
+VALUES (8, 'WaitingForDoctor')
+ON CONFLICT (status_id) DO NOTHING;
+
+-- 2. Thêm cột nurse_note (JSONB) vào bảng appointments
+--    Lưu toàn bộ bộ sinh hiệu do điều dưỡng đo dưới dạng JSON
+--    Ví dụ: {
+--      "bloodPressure": "120/80",
+--      "heartRate": 75,
+--      "temperature": 36.5,
+--      "weight": 60.0,
+--      "height": 165.0,
+--      "bmi": 22.0,
+--      "nurseNote": "Bệnh nhân tỉnh táo, không đau cấp tính",
+--      "measuredAt": "2026-08-02T10:30:00"
+--    }
+ALTER TABLE appointments
+    ADD COLUMN IF NOT EXISTS nurse_note JSONB;
+
+-- Xác nhận kết quả
+SELECT status_id, status_name FROM appointment_statuses ORDER BY status_id;
+SELECT column_name, data_type FROM information_schema.columns
+    WHERE table_name = 'appointments' AND column_name = 'nurse_note';
+
+SELECT '✅ NURSE WORKFLOW MIGRATION HOÀN THÀNH!' AS status;
+
+-- Chạy trong pgAdmin:
+ALTER TABLE appointments ADD COLUMN IF NOT EXISTS appointment_date DATE;
+UPDATE appointments SET appointment_date = created_at::date WHERE appointment_date IS NULL;
+
+-- 0. (Khuyến nghị) Kiểm tra constraint hiện tại của medical_tests trước khi sửa, để
+--    biết chắc tên/giá trị hợp lệ thật sự trên DB (script bên dưới không phụ thuộc kết quả này).
+-- SELECT conname, pg_get_constraintdef(oid) FROM pg_constraint WHERE conrelid = 'medical_tests'::regclass;
+
+-- 1. Thêm trạng thái mới: AwaitingTestResults (status_id = 9)
+--    Ý nghĩa: Bác sĩ đã chỉ định CLS, bệnh nhân đang ở phòng Xét nghiệm/Siêu âm,
+--    chưa quay lại phòng khám. Dùng để hàng đợi Lễ tân/Bác sĩ hiển thị đúng trạng thái,
+--    KHÔNG bắt buộc — hàng đợi của KTV vẫn dựa trên chính bảng medical_tests/ultrasound_results.
+INSERT INTO appointment_statuses (status_id, status_name)
+VALUES (9, 'AwaitingTestResults')
+ON CONFLICT (status_id) DO NOTHING;
+
+-- 2. Sửa default sai lệch của medical_tests.result_status: 'pending' (chữ thường, do EF model
+--    Entities.cs đặt) → 'Pending' (chữ hoa, đúng với dữ liệu thật DbSeeder/TrySeedSampleRecords đang dùng)
+ALTER TABLE medical_tests ALTER COLUMN result_status SET DEFAULT 'Pending';
+UPDATE medical_tests SET result_status = 'Pending' WHERE result_status = 'pending';
+
+-- 3. Cho phép performed_at = NULL (nghĩa là "đã chỉ định nhưng chưa thực hiện"),
+--    thay vì mặc định = now() ngay lúc bác sĩ vừa chỉ định (sai ý nghĩa nghiệp vụ)
+ALTER TABLE medical_tests ALTER COLUMN performed_at DROP NOT NULL;
+ALTER TABLE medical_tests ALTER COLUMN performed_at DROP DEFAULT;
+ALTER TABLE ultrasound_results ALTER COLUMN performed_at DROP NOT NULL;
+ALTER TABLE ultrasound_results ALTER COLUMN performed_at DROP DEFAULT;
+
+-- 4. Thêm cột audit: ai chỉ định, ai thực hiện, và liên kết tới bảng giá dịch vụ medical_services
+--    (bảng này đã có sẵn từ update_hospital_services_and_prices.sql nhưng chưa có FK tham chiếu tới)
+ALTER TABLE medical_tests
+    ADD COLUMN IF NOT EXISTS ordered_by UUID,
+    ADD COLUMN IF NOT EXISTS ordered_at TIMESTAMP DEFAULT now(),
+    ADD COLUMN IF NOT EXISTS performed_by UUID,
+    ADD COLUMN IF NOT EXISTS service_id INT REFERENCES medical_services(service_id);
+
+-- 5. ultrasound_results chưa có cột trạng thái tường minh (trước giờ suy ra qua conclusion IS NULL) —
+--    thêm status để đối xứng với medical_tests và dễ truy vấn hàng đợi KTV
+ALTER TABLE ultrasound_results
+    ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'Pending', -- 'Pending' | 'Completed'
+    ADD COLUMN IF NOT EXISTS ordered_by UUID,
+    ADD COLUMN IF NOT EXISTS ordered_at TIMESTAMP DEFAULT now(),
+    ADD COLUMN IF NOT EXISTS performed_by UUID,
+    ADD COLUMN IF NOT EXISTS service_id INT REFERENCES medical_services(service_id);
+
+UPDATE ultrasound_results SET status = 'Completed' WHERE conclusion IS NOT NULL AND status = 'Pending';
+
+-- Xác nhận kết quả
+SELECT status_id, status_name FROM appointment_statuses ORDER BY status_id;
+SELECT column_name, data_type, is_nullable, column_default FROM information_schema.columns
+    WHERE table_name IN ('medical_tests', 'ultrasound_results')
+    ORDER BY table_name, ordinal_position;
+
+SELECT '✅ KTV CẬN LÂM SÀNG WORKFLOW MIGRATION HOÀN THÀNH!' AS status;
